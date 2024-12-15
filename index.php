@@ -2,17 +2,17 @@
 header("Content-Type: application/json");
 require 'db.php';
 
-// Helper function for responses
 function respond($data, $status = 200) {
     http_response_code($status);
     echo json_encode($data);
     exit;
 }
 
-// Handle GET Request: Get all blogs or a blog by ID
-if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+$method = $_SERVER['REQUEST_METHOD'];
+
+// Handle GET Request: Get all blogs or a single blog by ID
+if ($method === 'GET') {
     if (isset($_GET['id'])) {
-        // Get blog by ID
         $id = intval($_GET['id']);
         $stmt = $conn->prepare("SELECT * FROM blogs WHERE id = ?");
         $stmt->execute([$id]);
@@ -24,7 +24,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             respond(['message' => 'Blog not found'], 404);
         }
     } else {
-        // Get all blogs
         $stmt = $conn->query("SELECT * FROM blogs");
         $blogs = $stmt->fetchAll(PDO::FETCH_ASSOC);
         respond($blogs);
@@ -32,7 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 }
 
 // Handle POST Request: Create a new blog
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if ($method === 'POST') {
     $data = json_decode(file_get_contents('php://input'), true);
 
     if (isset($data['title'], $data['description'], $data['category'])) {
@@ -44,37 +43,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Handle PUT Request: Update a blog
-if ($_SERVER['REQUEST_METHOD'] === 'PUT' && isset($_GET['id'])) {
-    $id = intval($_GET['id']); // Convert id to an integer
-    $input = json_decode(file_get_contents('php://input'), true); // Parse JSON input
+// Handle PUT Request: Update an existing blog
+if ($method === 'PUT') {
+    if (!isset($_GET['id'])) {
+        respond(['error' => 'ID is required for updating a blog'], 400);
+    }
 
-    if (isset($input['title'], $input['description'], $input['category'])) {
+    $id = intval($_GET['id']);
+    $data = json_decode(file_get_contents('php://input'), true);
+
+    if (isset($data['title'], $data['description'], $data['category'])) {
         $stmt = $conn->prepare("UPDATE blogs SET title = ?, description = ?, category = ? WHERE id = ?");
-        $stmt->execute([
-            $input['title'],
-            $input['description'],
-            $input['category'],
-            $id
-        ]);
+        $stmt->execute([$data['title'], $data['description'], $data['category'], $id]);
 
         if ($stmt->rowCount() > 0) {
-            echo json_encode(['message' => 'Blog updated successfully']);
+            respond(['message' => 'Blog updated successfully']);
         } else {
-            echo json_encode(['message' => 'No changes made or blog not found']);
+            respond(['message' => 'No changes made or blog not found'], 404);
         }
     } else {
-        http_response_code(400); // Bad request
-        echo json_encode(['message' => 'Invalid input']);
+        respond(['error' => 'Invalid input'], 400);
     }
-} else {
-    http_response_code(405); // Method not allowed
-    echo json_encode(['error' => 'Invalid request method']);
 }
 
-
 // Handle DELETE Request: Delete a blog
-if ($_SERVER['REQUEST_METHOD'] === 'DELETE' && isset($_GET['id'])) {
+if ($method === 'DELETE') {
+    if (!isset($_GET['id'])) {
+        respond(['error' => 'ID is required for deleting a blog'], 400);
+    }
+
     $id = intval($_GET['id']);
     $stmt = $conn->prepare("DELETE FROM blogs WHERE id = ?");
     $stmt->execute([$id]);
@@ -86,6 +83,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'DELETE' && isset($_GET['id'])) {
     }
 }
 
-// Default response for unsupported routes
-respond(['error' => 'Invalid request method'], 405);
+// Default handler for unsupported methods
+respond(['error' => 'Method not allowed'], 405);
 ?>
